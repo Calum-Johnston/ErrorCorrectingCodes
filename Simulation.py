@@ -1,56 +1,12 @@
 import random
 import numpy
+import math
 
-#function simulation
-#input: numbers r, N and p where r>=2, N>=1 and 0<=p<=1
-#output: Something
-def simulation(r, N, p):
-    count = 1; successes = 0; failures = 0; errors = 0
-    print(">>> r = %d; N = %d; p = %f" % (r, N, p))
-    while(count <= N):
-        print(">>> Simulation(" , r , "," , N , "," , p , ")")
-        print("*** Experiment", count,"of", N ,"***")
-        
-        #Generate Message
-        m = randomMessage(r)
-        print("\n* Source *")
-        print("Message")
-        print("m =", m)
-        
-        #Encode message
-        c = encoder(m, r)
-        print("\nCodeword")
-        print("c =", c)
-        
-        #Transmit codeword
-        v = BSC(c, p)
-        print("\n* Channel *")
-        print("Recieved vector")
-        print("v =", v)
-        
-        #Decode codeword
-        print("\n* Destination *")
-        print("Decoding by syndrome")
-        c = syndrome(v, r)
-        print("\nCodeword estimate")
-        print("hatc = ", c)
-        
-        #Retrieve message
-        newm = retrieveMessage(c, r)
-        print("\nMessage estimate")
-        print("hatm =", newm)
-        
-        if(newm == m):
-            successes += 1
-        else:
-            failures += 1
-        
-        count += 1
-    print("\n*** End of experiments ***")
-    print("\nSuccesses:", successes)
-    print("Failures:", failures)
-    print("Errors:", errors)
-    print("\nExperimental DEP:", (successes/N) * 100)
+#Parity info:
+#Parity bit on right of codewords
+#Parity of recieved vector is even, but syndrome is not all zeros = Failure
+#Parity of recieved vector is even, but syndrome is zero = Correct
+#Parity of recieved vector is odd, can correct if one bit, otherwise error
 
 #function randomMessage
 #input: a number r
@@ -67,19 +23,21 @@ def randomMessage(r):
 #function encoder
 #input: a String m
 #output: a String c representing the codeword
-def encoder(m, r):
-    G = numpy.matrix(hammingGeneratorMatrix(r))
-    
+def encoder(m):
+    r = math.floor(math.log2(len(m))) + 1 
+
+    G = numpy.matrix(hammingGeneratorMatrix(r))   
+
     identityMatrix = numpy.matrix(numpy.identity(2**r-1))
     additionalColumn = numpy.ones((2**r-1, 1), dtype=int)
     M = numpy.append(identityMatrix, additionalColumn, axis=1)
 
     extG = (G * M) % 2
     
-    message = numpy.matrix(m)
-    codeword =(message * extG) % 2
+    m = numpy.matrix(m)
+    c =(m * extG) % 2
     
-    return codeword
+    return c
 
 
 
@@ -106,7 +64,9 @@ def BSC(c, p):
 #function syndrome
 #input: an array v (vector)
 #output: C, or a decoder failure
-def syndrome(v, r):
+def syndrome(v):
+    r = math.floor(math.log2(v.size)) 
+    
     H = numpy.matrix(parityCheckMatrix(r))
     
     additionalRow = numpy.zeros((1, r), dtype=int)
@@ -117,6 +77,7 @@ def syndrome(v, r):
                      , axis=1)
     
     syn = (v * H) % 2
+    syn = numpy.squeeze(numpy.asarray(syn))
     pos = int(vectorToDecimal(syn))
     v = numpy.array(v)
     print("syndrome =", syn)
@@ -135,7 +96,8 @@ def syndrome(v, r):
 #function retrieveMessage
 #input: the codeword C
 #output: M, the estimate of the message
-def retrieveMessage(c, r):
+def retrieveMessage(c):
+    r = math.floor(math.log2(c.size))
     pos = 1
     message = []
     while(pos < 2**r):
@@ -147,6 +109,8 @@ def retrieveMessage(c, r):
             continue
         message.append(int(c[0][i]))
     return message
+
+
         
 #function HammingG
 #input: a number r
@@ -189,7 +153,11 @@ def hammingGeneratorMatrix(r):
 
 
 
+#function parityCheckMatrix
+#input: a number r
+#output: H, the transposed parity check matrix of the (2^r-1,2^r-r-1) Hamming code
 def parityCheckMatrix(r):
+    
     #construct H'
     H = []
     for i in range(1, 2**r):
@@ -215,14 +183,67 @@ def decimalToVector(n,r):
 #function vectorToDecimal
 #input: numbers n
 #output: an integer v representing binary value n
-def  vectorToDecimal(n):
-    arr = numpy.squeeze(numpy.asarray(n))
+def vectorToDecimal(n):
     count = 0
     number = 0
-    for i in range(len(arr) - 2, -1, -1):
-        number += (2**count) * arr[i]
+    for i in range(len(n) - 2, -1, -1):
+        number += (2**count) * n[i]
         count += 1
     return number
 
 
-simulation(3, 10, 0.1)
+
+#function simulation
+#input: numbers r, N and p where r>=2, N>=1 and 0<=p<=1
+#output: Something
+def simulation(r, N, p):
+    count = 1; successes = 0; failures = 0; errors = 0
+    print(">>> r = %d; N = %d; p = %f" % (r, N, p))
+    while(count <= N):
+        print("\n>>> Simulation(" , r , "," , N , "," , p , ")")
+        print("*** Experiment", count,"of", N ,"***")
+        
+        #Generate Message
+        m = randomMessage(r)
+        print("\n* Source *")
+        print("Message")
+        print("m =", m)
+        
+        #Encode message
+        c = encoder(m)
+        print("\nCodeword")
+        print("c =", c)
+        
+        #Transmit codeword
+        v = BSC(c, p)
+        print("\n* Channel *")
+        print("Recieved vector")
+        print("v =", v)
+        
+        #Decode codeword
+        print("\n* Destination *")
+        print("Decoding by syndrome")
+        c = syndrome(v)
+        print("\nCodeword estimate")
+        print("hatc = ", c)
+        
+        #Retrieve message
+        newm = retrieveMessage(c)
+        print("\nMessage estimate")
+        print("hatm =", newm)
+        
+        if(newm == m):
+            successes += 1
+        else:
+            errors += 1
+        
+        count += 1
+    print("\n*** End of experiments ***")
+    print("\nSuccesses:", successes)
+    print("Failures:", failures)
+    print("Errors:", errors)
+    print("\nExperimental DEP:", (successes/N) * 100)
+        
+    
+
+simulation(4, 10, 0.1)
