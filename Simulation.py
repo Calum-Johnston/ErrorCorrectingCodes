@@ -2,12 +2,6 @@ import random
 import numpy
 import math
 
-#Parity info:
-#Parity bit on right of codewords
-#Parity of recieved vector is even, but syndrome is not all zeros = Failure
-#Parity of recieved vector is even, but syndrome is zero = Correct
-#Parity of recieved vector is odd, can correct if one bit, otherwise error
-
 #function randomMessage
 #input: a number r
 #output: a String m with length r
@@ -24,7 +18,7 @@ def randomMessage(r):
 #input: a String m
 #output: a String c representing the codeword
 def encoder(m):
-    r = math.floor(math.log2(len(m))) + 1 
+    r = math.floor(math.log2(len(m))) + 1
 
     G = numpy.matrix(hammingGeneratorMatrix(r))   
 
@@ -35,8 +29,10 @@ def encoder(m):
     extG = (G * M) % 2
     
     m = numpy.matrix(m)
-    c =(m * extG) % 2
-    
+    c = (m * extG) % 2
+
+    c = (c.A1).astype(int)
+
     return c
 
 
@@ -45,19 +41,12 @@ def encoder(m):
 #input: a String c (codeword) and the crossover probability p
 #output: the array v (representing a vector)
 def BSC(c, p):
-    codeword = numpy.squeeze(numpy.asarray(c))
-    v = codeword
+    v = c
     num = 1 / p
-    for i in range(0, len(codeword) - 1):
+    for i in range(0, len(c) - 1):
         if(random.randint(1, num) == 1):
-            if(codeword[i] == 0):
-                v[i] = 1
-            elif(codeword[i] == 1):
-                v[i] = 0
-        else:
-            v[i] == codeword[i]
-    vector = numpy.matrix(v)
-    return vector
+            v[i] = (v[i] + 1) % 2
+    return v
         
 
 
@@ -66,30 +55,32 @@ def BSC(c, p):
 #output: C, or a decoder failure
 def syndrome(v):
     r = math.floor(math.log2(v.size)) 
+    v = numpy.matrix(v)
     
     H = numpy.matrix(parityCheckMatrix(r))
     
     additionalRow = numpy.zeros((1, r), dtype=int)
-    newH = numpy.append(H, additionalRow, axis=0)
-    
     additionalColumn = numpy.ones(((2**r), 1),dtype=int)
-    H = numpy.append(newH, additionalColumn
-                     , axis=1)
+    
+    tempH = numpy.append(H, additionalRow, axis=0) 
+    H = numpy.append(tempH, additionalColumn, axis=1)
     
     syn = (v * H) % 2
-    syn = numpy.squeeze(numpy.asarray(syn))
+    syn = syn.A1
     pos = int(vectorToDecimal(syn))
-    v = numpy.array(v)
+    C = v.A1
+    
     print("syndrome =", syn)
     print("i =", pos)
 
     if(pos != 0):
-        if(v[0][pos - 1] == 0):
-            v[0][pos - 1] = 1
-        elif(v[0][pos - 1] == 1):
-            v[0][pos - 1] = 0
-            
-    return v
+        C[pos - 1] = (C[pos - 1] + 1) % 2
+    
+    #Checks if a failure has occurred, if so, makes the first digit of the array 2
+    if(syn[r] == 0) and (pos != 0):
+        C[0] = 2
+    
+    return C
 
 
     
@@ -97,18 +88,12 @@ def syndrome(v):
 #input: the codeword C
 #output: M, the estimate of the message
 def retrieveMessage(c):
-    r = math.floor(math.log2(c.size))
-    pos = 1
-    message = []
-    while(pos < 2**r):
-        c[0][pos - 1] = 3
-        pos = pos * 2
-    c[0][2**r-1] = 3
-    for i in range(0, 2**r):
-        if(c[0][i] == 3):
-            continue
-        message.append(int(c[0][i]))
-    return message
+    m = []
+    for i in range(0, c.size):
+        pos = i + 1
+        if not(math.log2(pos) == math.floor(math.log2(pos))):
+               m.append(c[i])
+    return m
 
 
         
@@ -198,10 +183,10 @@ def vectorToDecimal(n):
 #output: Something
 def simulation(r, N, p):
     count = 1; successes = 0; failures = 0; errors = 0
-    print(">>> r = %d; N = %d; p = %f" % (r, N, p))
+    print(">>> r = %d; N = %d; p = %.2f" % (r, N, p))
     while(count <= N):
-        print("\n>>> Simulation(" , r , "," , N , "," , p , ")")
-        print("*** Experiment", count,"of", N ,"***")
+        print("\n>>> Simulation(%d, %d, %.2f)" % (r, N, p))
+        print("*** Experiment %d of %d ***" % (count, N))
         
         #Generate Message
         m = randomMessage(r)
@@ -224,26 +209,32 @@ def simulation(r, N, p):
         print("\n* Destination *")
         print("Decoding by syndrome")
         c = syndrome(v)
-        print("\nCodeword estimate")
-        print("hatc = ", c)
-        
-        #Retrieve message
-        newm = retrieveMessage(c)
-        print("\nMessage estimate")
-        print("hatm =", newm)
-        
-        if(newm == m):
-            successes += 1
+        if(c[0] == 2):
+            failures += 1
+            print("\nDecoding failure")
         else:
-            errors += 1
+            print("\nCodeword estimate")
+            print("hatc = ", c)
+        
+            #Retrieve message
+            newm = retrieveMessage(c)
+            print("\nMessage estimate")
+            print("hatm =", newm)
+    
+            if(newm == m):
+                successes += 1
+                print("\nDecoding success")
+            else:
+                errors += 1
+                print("\nDecoding error")
         
         count += 1
     print("\n*** End of experiments ***")
     print("\nSuccesses:", successes)
     print("Failures:", failures)
     print("Errors:", errors)
-    print("\nExperimental DEP:", (successes/N) * 100)
+    print("\nExperimental DEP:", (errors/N))
         
     
 
-simulation(4, 10, 0.1)
+simulation(12, 1, 0.01)
